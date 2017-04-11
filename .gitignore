@@ -1,0 +1,16 @@
+.idea/
+wire/
+
+site/assets/templates/node_modules
+site/assets/templates/cmd/node_modules
+site/assets/templates/dist
+*.hot-update.json
+
+site-sage/templates/node_modules
+site-sage/templates/dist
+
+/.htaccess
+/index.php
+/LICENSE.TXT
+/README.md
+/README-PW.md

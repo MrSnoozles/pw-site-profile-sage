@@ -1,0 +1,242 @@
+<?php namespace ProcessWire;
+/**
+ * Blade Template Engine (1.0.0)
+ * Enables blade template engine instead of plainphp templates in ProcessWire
+ * 
+ * @author Youbility Software
+ * 
+ * ProcessWire 2.x
+ * Copyright (C) 2011 by Ryan Cramer
+ * Licensed under GNU/GPL v2, see LICENSE.TXT
+ * 
+ * http://www.processwire.com
+ * http://www.ryancramer.com
+ * 
+ */
+
+class BladeTemplateEngine extends WireData implements Module {
+
+	/**
+	 * @field array Default config values
+	 */
+	protected static $defaults = array(
+		'fuel'              => 'page, pages, config, session, user, input',
+		'ignoredTemplates'  => 'email-administrator, email-autoresponder, form-builder',
+		'cacheEnable'       => false,
+		'cacheAutoReload'   => true,
+		'autoEscape'        => false,
+	);
+
+	public static function getModuleInfo() {
+		return array(
+			'title' => "Blade Template Engine",
+			'version' => "1.0.0",
+			'summary' => "Enables blade template engine instead of plain php templates in ProcessWire",
+			
+			'author' => "Youbility Software",
+			'href' => "https://www.youbility.de",
+			
+			//'permission' => array(),
+			'autoload' => true,
+			'singular' => true,
+			'permanent' => false,
+			
+			'requires' => array("PHP>=5.4.0", "ProcessWire>=2.5.28"),
+			//'installs' => array(),
+			
+		);
+	}
+
+	public function init() {
+		// register autoloader
+        require_once wire('config')->paths->BladeTemplateEngine . 'vendor/autoload.php'/*NoCompile*/;
+
+        // replace default page rendering by hooked method
+        $this->addHookBefore('PageRender::renderPage', $this, 'renderPageWithBlade');
+
+        // replace default chunk rendering by hooked method
+        #$this->addHookBefore('nw\ChunkRenderer::render', $this, 'renderChunkWithTwig');
+	}
+
+
+	/**
+	 * Render page with Laravel's blade template engine.
+	 * @param HookEvent $event
+	 *
+	 * @throws WirePermissionException
+	 */
+	public function renderPageWithBlade(HookEvent $event) {
+		$parentEvent = $event->arguments(0); // grab event provided to PageRender::renderPage
+
+        $page = $parentEvent->object;
+
+        // don't mess with admin templates
+        if($page->template == 'admin') return;
+
+        // parse ignored templates if set
+        if( isset($this->data['ignoredTemplates']) && !empty($this->data['ignoredTemplates']) ) {
+            $ignoredTemplates = preg_split('/\s*[,;]\s*/', $this->data['ignoredTemplates'], - 1, PREG_SPLIT_NO_EMPTY);
+            if (in_array($page->template, $ignoredTemplates)) return;
+        }
+
+        // double check page's status
+        // taken from PageRender::__render()
+        if ($page->status >= Page::statusUnpublished && !$page->viewable()) {
+            throw new WirePermissionException('Page \'' . $page->url . '\' is not currently viewable.');
+        }
+
+        // forced replacing of default page rendering behaviour
+        $event->replace = true;
+
+        // look for cached data
+        // taken from PageRender::__render()
+        $options = count($parentEvent->arguments) ? $parentEvent->arguments[0] : array();
+        $defaultOptions = array(
+            'prependFile' => $page->template->noPrependTemplateFile ? null : $this->config->prependTemplateFile,
+            'prependFiles' => $page->template->prependFile ? array($page->template->prependFile) : array(),
+            'appendFile' => $page->template->noAppendTemplateFile ? null : $this->config->appendTemplateFile,
+            'appendFiles' => $page->template->appendFile ? array($page->template->appendFile) : array(),
+            'forceBuildCache' => false,
+        );
+        $options = array_merge($defaultOptions, $options);
+
+        $cacheAllowed = wire('modules')->get('PageRender')->isCacheAllowed($page);
+        $cacheFile = null;
+
+        if ($cacheAllowed) {
+            $cacheFile = wire('modules')->get('PageRender')->getCacheFile($page);
+            if(!$options['forceBuildCache'] && ($data = $cacheFile->get()) !== false) {
+                $parentEvent->return = $data;
+                return;
+            }
+      }
+
+      // allow page fields to be accessed directly in Twig
+      // e.g. {{ page.myfield }} instead of {{ page.get('myfield') }}
+      Page::$issetHas = true;
+
+      $files = $this->getPrependAppendFiles($page, $options, $this->config);
+      $output = $this->combineOutput($files, $page);
+
+      // cache combinedOutput if possible
+      // taken from PageRender::__render()
+      if (!empty($output) && $cacheAllowed && !is_null($cacheFile)) $cacheFile->save($output);
+
+      // manually set return of original event
+      $parentEvent->return = $output;
+	}
+
+
+	    /**
+     * Adds prepend and append files if set
+     *
+     * @param Page $page
+     * @param array $options
+     * @param Config $config
+     * @return array
+     */
+    private function getPrependAppendFiles($page, $options, $config) {
+        // core output first to get prepend and append files working
+        $output = $page->output(true);
+
+        if ($output) {
+
+            // global prepend/append include files apply only to user-defined templates, not system templates
+            if(!($page->template->flags & Template::flagSystem)) {
+
+                foreach(array('prependFile' => 'prependFiles', 'appendFile' => 'appendFiles') as $singular => $plural) {
+                    if ($options[$singular]) array_unshift($options[$plural], $options[$singular]);
+
+                    foreach($options[$plural] as $file) {
+                        if (!ctype_alnum(str_replace(array(".", "-", "_", "/"), "", $file))) continue;
+                        if (strpos($file, '..') !== false || strpos($file, '/.') !== false) continue;
+                        $file = $config->paths->templates . trim($file, '/');
+                        if (!is_file($file)) continue;
+                        if ($plural == 'prependFiles') $output->setPrependFilename($file);
+                        else $output->setAppendFilename($file);
+                    }
+                }
+            }
+
+            // pass along the $options as a local variable to the template so that one can provide their
+            // own additional variables in it if they want to
+            $output->set('options', $options);
+        }
+
+        $prepend = array();
+        if (count($output->prependFilename) > 0) {
+            foreach ($output->prependFilename as $file) {
+                $prepend[] = new TemplateFile($file);
+            }
+        }
+
+        $append = array();
+        if (count($output->appendFilename) > 0) {
+            foreach ($output->appendFilename as $file) {
+                $append[] = new TemplateFile($file);
+            }
+        }
+
+        return array('prepend' => $prepend, 'append' => $append);
+    }
+
+
+    /**
+     * Combine output
+     *
+     * @param array $files
+     * @param Page $page
+     */
+    private function combineOutput($files, $page) {
+        // template vars contains PW variables $page, $pages, $config etc.
+	    $templateVars = $this->collectVariables($page->output);
+
+        $output = '';
+        foreach ($files['prepend'] as $file) {
+            $output .= $file->render();
+        }
+        
+        $templateName =
+            $page->template->altFilename
+            ? $page->template->altFilename
+            : $page->template->name;
+
+        $viewPath = wire('config')->paths->templates;
+		$cachePath = wire('config')->paths->cache;
+
+		$blade = new \Jenssegers\Blade\Blade($viewPath, $cachePath);
+		$output .= $blade->make($templateName, $templateVars)->render();
+
+        foreach ($files['append'] as $file) {
+            $output .= $file->render();
+        }
+
+        return $output;
+    }
+
+
+
+	/**
+	 * Gather template variables from wire fuel and given $dataProvider
+	 *
+	 * Module config setting 'fuel' defines, which part of the wire fuel will be imported.
+	 *
+	 * @param WireData $dataProvider
+	 * @return array
+	 */
+	protected function collectVariables(WireData $dataProvider) {
+		$variables = array();
+
+		$fuel = isset($this->data['fuel']) ? $this->data['fuel'] : '';
+
+		$fuel = preg_split('/\s*[,;]\s*/', $fuel, - 1, PREG_SPLIT_NO_EMPTY);
+		foreach ($fuel as $key) {
+			$variables[$key] = wire($key);
+		}
+
+		$variables = array_merge($variables, $dataProvider->getArray());
+
+		return $variables;
+	}
+
+}
