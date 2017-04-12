@@ -51,11 +51,12 @@ class TemplateEngineBlade extends WireData implements Module {
 		// register autoloader
         require_once wire('config')->paths->BladeTemplateEngine . 'vendor/autoload.php'/*NoCompile*/;
 
+		// require custom Blade class
+		require_once __DIR__ . '/Blade.php';
+		require_once __DIR__ . '/BladeCompiler.php';
+
         // replace default page rendering by hooked method
         $this->addHookBefore('PageRender::renderPage', $this, 'renderPageWithBlade');
-
-        // replace default chunk rendering by hooked method
-        #$this->addHookBefore('nw\ChunkRenderer::render', $this, 'renderChunkWithTwig');
 	}
 
 
@@ -195,8 +196,8 @@ class TemplateEngineBlade extends WireData implements Module {
         foreach ($files['prepend'] as $file) {
             $output .= $file->render();
         }
-        
-        $templateName =
+
+	    $templateName =
             $page->template->altFilename
             ? $page->template->altFilename
             : $page->template->name;
@@ -204,7 +205,7 @@ class TemplateEngineBlade extends WireData implements Module {
         $viewPath = wire('config')->paths->templates;
 		$cachePath = wire('config')->paths->cache;
 
-		$blade = new \Jenssegers\Blade\Blade($viewPath, $cachePath);
+		$blade = new \TemplateEngineBlade\Blade($viewPath, $cachePath);
 		$output .= $blade->make($templateName, $templateVars)->render();
 
         foreach ($files['append'] as $file) {
