@@ -16,6 +16,8 @@
 
 class TemplateEngineBlade extends WireData implements Module {
 
+	protected static $templateVariables = array();
+
 	/**
 	 * @field array Default config values
 	 */
@@ -57,6 +59,8 @@ class TemplateEngineBlade extends WireData implements Module {
 
         // replace default page rendering by hooked method
         $this->addHookBefore('PageRender::renderPage', $this, 'renderPageWithBlade');
+
+		$this->addHookBefore('TemplateFile::render', $this, 'importVariablesFromTemplateFiles');
 	}
 
 
@@ -171,6 +175,7 @@ class TemplateEngineBlade extends WireData implements Module {
             }
         }
 
+
         $append = array();
         if (count($output->appendFilename) > 0) {
             foreach ($output->appendFilename as $file) {
@@ -206,7 +211,7 @@ class TemplateEngineBlade extends WireData implements Module {
 		$cachePath = wire('config')->paths->cache;
 
 		$blade = new \TemplateEngineBlade\Blade($viewPath, $cachePath);
-		$output .= $blade->make($templateName, $templateVars)->render();
+		$output .= $blade->make($templateName, self::$templateVariables)->render();
 
         foreach ($files['append'] as $file) {
             $output .= $file->render();
@@ -222,6 +227,7 @@ class TemplateEngineBlade extends WireData implements Module {
 	 *
 	 * Module config setting 'fuel' defines, which part of the wire fuel will be imported.
 	 *
+	 * @deprecated
 	 * @param WireData $dataProvider
 	 * @return array
 	 */
@@ -238,6 +244,91 @@ class TemplateEngineBlade extends WireData implements Module {
 		$variables = array_merge($variables, $dataProvider->getArray());
 
 		return $variables;
+	}
+
+
+	protected function importVariablesFromTemplateFiles($event)
+	{
+		// replace with original render method
+		$event->replace = true;
+
+		$self = $event->object;
+
+		if(!$self->filename) return '';
+		if(!file_exists($self->filename)) {
+			$error = "Template file does not exist: '$self->filename'";
+			if($self->throwExceptions) throw new WireException($error);
+			$self->error($error);
+			return '';
+		}
+
+		// ensure that wire() functions in template file map to correct ProcessWire instance
+		$self->savedInstance = ProcessWire::getCurrentInstance();
+		ProcessWire::setCurrentInstance($self->wire());
+
+		$self->profiler = $self->wire('profiler');
+		$self->savedDir = getcwd();
+
+		if($self->chdir) {
+			chdir($self->chdir);
+		} else {
+			chdir(dirname($self->filename));
+		}
+
+		$fuel = $self->getArray();
+		extract($fuel);
+
+		ob_start();
+
+		foreach($self->prependFilename as $_filename) {
+			if($self->halt) break;
+			if($self->profiler) $self->start($_filename);
+			/** @noinspection PhpIncludeInspection */
+			include($_filename);
+
+			if($self->profiler) $self->stop();
+		}
+
+
+		if($self->profiler) $self->start($self->filename);
+		if($self->halt) {
+			$returnValue = 0;
+		} else {
+			/** @noinspection PhpIncludeInspection */
+			$returnValue = require($self->filename);
+		}
+		if($self->profiler) $self->stop();
+
+		foreach($self->appendFilename as $_filename) {
+			if($self->halt) break;
+			if($self->profiler) $self->start($_filename);
+			/** @noinspection PhpIncludeInspection */
+			require($_filename);
+			if($self->profiler) $self->stop();
+		}
+
+		$out = "\n" . ob_get_contents() . "\n";
+		ob_end_clean();
+
+		//--------------------------------------------------------------
+		// register variables to global scope (this part is new)
+		//--------------------------------------------------------------
+		// when we prepend _init.php we still want to be able to access
+		// all variables that were defined there
+		$variables = array_diff_key(get_defined_vars(), array(
+			'returnValue' => 1,
+			'event'       => 1,
+			'this'        => 1
+		));
+		self::$templateVariables = array_merge(self::$templateVariables, $variables);
+
+		if($self->savedDir) chdir($self->savedDir);
+		ProcessWire::setCurrentInstance($self->savedInstance);
+
+		$out = trim($out);
+		if(!strlen($out) && !$self->halt && $returnValue && $returnValue !== 1) return $returnValue;
+
+		return $out;
 	}
 
 }
