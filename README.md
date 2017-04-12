@@ -40,6 +40,8 @@ yarn # get all dependencies. Doesn't work? Check the requirements ;)
 * Rename `site-sage` to `site`. You probably have to rename your old site directory
 * Go to your backend. Activate the `TemplateEngineBlade` module
 * Edit configuration in `site/config.php`
+* Remove directory `site/install`
+* [Optional] Put the changes from your old site profile to the new one 
 
 ## Working with the site profile
 
