@@ -43,7 +43,6 @@ $config->debug = true;
  *
  */
 $config->templateExtension = 'blade.php';
-//$config->moduleCompile = false;
 
 
 /**
@@ -74,7 +73,7 @@ $config->appendTemplateFile = '';
  *
  * This enables automatic injection of regions in specific containers.
  */
-$config->useMarkupRegions = true;
+$config->useMarkupRegions = false;
 
 
 /**
@@ -91,7 +90,7 @@ $config->useFunctionsAPI = true;
  * @var bool
  *
  */
-$config->usePoweredBy = true;
+$config->usePoweredBy = false;
 
 
 /*** INSTALLER CONFIG ********************************************************************/
@@ -144,52 +143,3 @@ $config->installed = 1466593802;
  * 
  */
 $config->httpHosts = array('processwire.dev');
-
-
-/**
- * Installer: Database Configuration
- * 
- */
-$config->dbHost = 'localhost';
-$config->dbName = 'processwire';
-$config->dbUser = 'root';
-$config->dbPass = '';
-$config->dbPort = '3306';
-
-/**
- * Installer: User Authentication Salt 
- * 
- * Must be retained if you migrate your site from one server to another
- * 
- */
-$config->userAuthSalt = '07197134bf4adf352926b200abc64e01'; 
-
-/**
- * Installer: File Permission Configuration
- * 
- */
-$config->chmodDir = '0755'; // permission for directories created by ProcessWire
-$config->chmodFile = '0644'; // permission for files created by ProcessWire 
-
-/**
- * Installer: Time zone setting
- * 
- */
-$config->timezone = 'Europe/Berlin';
-
-/**
- * Installer: Unix timestamp of date/time installed
- * 
- * This is used to detect which when certain behaviors must be backwards compatible.
- * Please leave this value as-is.
- * 
- */
-$config->installed = 1491906259;
-
-
-/**
- * Installer: HTTP Hosts Whitelist
- * 
- */
-$config->httpHosts = array('processwire.dev', 'www.processwire.dev');
-
