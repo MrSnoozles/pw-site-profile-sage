@@ -14,7 +14,7 @@
  * 
  */
 
-class BladeTemplateEngine extends WireData implements Module {
+class TemplateEngineBlade extends WireData implements Module {
 
 	/**
 	 * @field array Default config values
@@ -29,7 +29,7 @@ class BladeTemplateEngine extends WireData implements Module {
 
 	public static function getModuleInfo() {
 		return array(
-			'title' => "Blade Template Engine",
+			'title' => "Template Engine Blade",
 			'version' => "1.0.0",
 			'summary' => "Enables blade template engine instead of plain php templates in ProcessWire",
 			
