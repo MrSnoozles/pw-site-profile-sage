@@ -26,7 +26,7 @@ This site profile is meant to be used with the ProcessWire CMS.
 ~~~bash
 cd site-sage/templates # change to templates directory
 
-yarn # get all dependencies
+yarn # get all dependencies. Doesn't work? Check the requirements ;)
 ~~~
 
 3. Edit configuration in `site-sage/templates/assets/config.json`
